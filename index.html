@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC 音樂卡播放器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #000;
+            color: #fff;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #333;
+        }
+        .status.ready {
+            background-color: #4CAF50;
+        }
+        .status.error {
+            background-color: #ff4444;
+        }
+        .status.info {
+            background-color: #333;
+        }
+        #imageDisplay {
+            max-width: 100%;
+            height: auto;
+            margin: 20px 0;
+            border-radius: 10px;
+        }
+        .audio-container {
+            background-color: #222;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            position: relative;
+        }
+        .loop-icon {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #4CAF50;
+            font-size: 20px;
+        }
+        .custom-audio {
+            width: 100%;
+            height: 40px;
+            background-color: #333;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .custom-audio::-webkit-media-controls-download-button {
+            display: none;
+        }
+        .browser-support {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #333;
+            color: #fff;
+            border-radius: 5px;
+        }
+        .hidden {
+            display: none;
+        }
+        .nfc-instructions {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #333;
+            border-radius: 5px;
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 5px;
+        }
+        .input-group button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px 0;
+        }
+        .input-group button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NFC 音樂卡播放器</h1>
+        <div id="status" class="status">請感應您的 NFC 卡片...</div>
+        
+        <div id="browserSupport" class="browser-support">
+            <div id="webNfcSupport" class="hidden">
+                提示：請使用 Chrome for Android 瀏覽器，並將 NFC 卡片靠近設備。
+            </div>
+            <div id="otherBrowserSupport" class="hidden">
+                提示：請使用支援 NFC 的應用程式（如 NFC Tools）讀取卡片，然後將讀取到的數據輸入下方。
+            </div>
+        </div>
+
+        <div id="manualInput" class="input-group hidden">
+            <input type="text" id="nfcData" placeholder="請輸入從 NFC 卡片讀取到的數據">
+            <button onclick="handleManualInput()">驗證並播放</button>
+        </div>
+
+        <div class="nfc-instructions">
+            <h3>如何使用：</h3>
+            <ol>
+                <li>使用支援 NFC 的應用程式（如 NFC Tools）讀取您的 NFC 卡片</li>
+                <li>將讀取到的數據輸入到上方輸入框</li>
+                <li>點擊「驗證並播放」按鈕</li>
+            </ol>
+            <p>NFC 卡片數據格式：</p>
+            <pre>
+{
+  "imageUrl": "https://dl.dropboxusercontent.com/...",
+  "audioUrl": "https://dl.dropboxusercontent.com/..."
+}
+            </pre>
+        </div>
+
+        <div id="content" class="hidden">
+            <img id="imageDisplay" style="display: none;">
+            
+            <div class="audio-container">
+                <div class="loop-icon">🔄</div>
+                <audio id="audioPlayer" class="custom-audio" controls loop></audio>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 檢查瀏覽器是否支援 Web NFC
+        if (!('NDEFReader' in window)) {
+            document.getElementById('status').className = 'status info';
+            document.getElementById('status').textContent = '請使用 NFC 讀取應用程式讀取卡片數據';
+            document.getElementById('otherBrowserSupport').classList.remove('hidden');
+            document.getElementById('manualInput').classList.remove('hidden');
+        } else {
+            document.getElementById('webNfcSupport').classList.remove('hidden');
+            // 初始化 NFC 讀取器
+            const ndef = new NDEFReader();
+            
+            // 開始掃描 NFC
+            async function startScanning() {
+                try {
+                    await ndef.scan();
+                    document.getElementById('status').className = 'status ready';
+                    document.getElementById('status').textContent = '請將 NFC 卡片靠近設備...';
+                } catch (error) {
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('status').textContent = '無法啟動 NFC 掃描: ' + error.message;
+                    document.getElementById('otherBrowserSupport').classList.remove('hidden');
+                    document.getElementById('manualInput').classList.remove('hidden');
+                }
+            }
+
+            // 處理 NFC 讀取事件
+            ndef.onreading = event => {
+                const decoder = new TextDecoder();
+                for (const record of event.message.records) {
+                    if (record.recordType === "text") {
+                        const text = decoder.decode(record.data);
+                        handleNFCTag(text);
+                    }
+                }
+            };
+
+            // 開始掃描
+            startScanning();
+        }
+
+        // 處理手動輸入
+        function handleManualInput() {
+            const input = document.getElementById('nfcData').value;
+            if (input) {
+                handleNFCTag(input);
+            } else {
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').textContent = '請輸入有效的 NFC 卡片數據';
+            }
+        }
+
+        // 處理 NFC 標籤內容
+        function handleNFCTag(content) {
+            try {
+                const data = JSON.parse(content);
+                
+                // 處理圖片
+                if (data.imageUrl) {
+                    const img = document.getElementById('imageDisplay');
+                    img.onerror = function() {
+                        document.getElementById('status').className = 'status error';
+                        document.getElementById('status').textContent = '無法載入圖片，請確認連結格式';
+                    };
+                    img.src = data.imageUrl;
+                    img.style.display = 'block';
+                }
+
+                // 處理音樂
+                if (data.audioUrl) {
+                    const audioPlayer = document.getElementById('audioPlayer');
+                    audioPlayer.onerror = function() {
+                        document.getElementById('status').className = 'status error';
+                        document.getElementById('status').textContent = '無法播放音樂，請確認連結格式';
+                    };
+                    audioPlayer.src = data.audioUrl;
+                    audioPlayer.loop = true;
+                    
+                    // 自動播放
+                    audioPlayer.play().catch(error => {
+                        document.getElementById('status').className = 'status error';
+                        document.getElementById('status').textContent = '無法自動播放，請點擊播放按鈕';
+                    });
+                }
+
+                document.getElementById('status').className = 'status ready';
+                document.getElementById('status').textContent = '正在播放...';
+                document.getElementById('content').classList.remove('hidden');
+            } catch (error) {
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').textContent = '無效的 NFC 卡片數據';
+            }
+        }
+    </script>
+</body>
+</html> 

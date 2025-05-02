@@ -64,6 +64,13 @@
         }
         .input-group {
             margin: 20px 0;
+            background-color: #222;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .input-group h3 {
+            margin: 10px 0;
+            color: #4CAF50;
         }
         .input-group input {
             width: 100%;
@@ -73,6 +80,7 @@
             color: #fff;
             border: 1px solid #555;
             border-radius: 5px;
+            box-sizing: border-box;
         }
         .input-group button {
             background-color: #4CAF50;
@@ -81,7 +89,8 @@
             padding: 10px 20px;
             border-radius: 5px;
             cursor: pointer;
-            margin: 5px 0;
+            margin: 10px 0;
+            width: 100%;
         }
         .input-group button:hover {
             background-color: #45a049;
@@ -89,8 +98,14 @@
         .instructions {
             margin: 20px 0;
             padding: 15px;
-            background-color: #333;
-            border-radius: 5px;
+            background-color: #222;
+            border-radius: 10px;
+        }
+        .hidden {
+            display: none;
+        }
+        .link-input {
+            margin-bottom: 15px;
         }
     </style>
 </head>
@@ -106,10 +121,18 @@
                 <li>點擊「建立連結」</li>
                 <li>複製分享連結</li>
             </ol>
+            <p>注意：請分別上傳圖片和音樂檔案，並獲取各自的分享連結</p>
         </div>
 
         <div class="input-group">
-            <input type="text" id="dropboxLink" placeholder="請輸入 Dropbox 分享連結">
+            <div class="link-input">
+                <h3>圖片連結</h3>
+                <input type="text" id="imageLink" placeholder="請輸入圖片 Dropbox 分享連結">
+            </div>
+            <div class="link-input">
+                <h3>音樂連結</h3>
+                <input type="text" id="audioLink" placeholder="請輸入音樂 Dropbox 分享連結">
+            </div>
             <button onclick="testPlay()">測試播放</button>
         </div>
 
@@ -135,41 +158,73 @@
         }
 
         function testPlay() {
-            const dropboxLink = document.getElementById('dropboxLink').value;
-            if (!dropboxLink) {
+            const imageLink = document.getElementById('imageLink').value;
+            const audioLink = document.getElementById('audioLink').value;
+            
+            if (!imageLink && !audioLink) {
                 document.getElementById('status').className = 'status error';
-                document.getElementById('status').textContent = '請輸入 Dropbox 分享連結';
+                document.getElementById('status').textContent = '請至少輸入一個有效的連結';
                 return;
             }
 
-            const convertedUrl = convertDropboxUrl(dropboxLink);
-            
             // 處理圖片
-            const img = document.getElementById('imageDisplay');
-            img.onerror = function() {
-                document.getElementById('status').className = 'status error';
-                document.getElementById('status').textContent = '無法載入圖片，請確認連結格式';
-            };
-            img.src = convertedUrl;
-            img.style.display = 'block';
+            if (imageLink) {
+                const convertedImageUrl = convertDropboxUrl(imageLink);
+                const img = document.getElementById('imageDisplay');
+                img.onerror = function() {
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('status').textContent = '無法載入圖片，正在嘗試其他格式...';
+                    // 嘗試使用不同的圖片格式
+                    const formats = [
+                        convertedImageUrl,
+                        convertedImageUrl.replace('?dl=1', '?raw=1'),
+                        convertedImageUrl.replace('?dl=1', '?dl=0'),
+                        convertedImageUrl.replace('dl.dropboxusercontent.com', 'www.dropbox.com')
+                    ];
+                    
+                    let currentFormat = 0;
+                    const tryNextFormat = () => {
+                        if (currentFormat < formats.length) {
+                            img.src = formats[currentFormat];
+                            currentFormat++;
+                        } else {
+                            document.getElementById('status').className = 'status error';
+                            document.getElementById('status').textContent = '無法載入圖片，請確認連結格式';
+                        }
+                    };
+                    
+                    img.onerror = tryNextFormat;
+                    tryNextFormat();
+                };
+                
+                // 設置圖片載入成功處理
+                img.onload = function() {
+                    document.getElementById('status').className = 'status ready';
+                    document.getElementById('status').textContent = '圖片載入成功';
+                };
+                
+                img.src = convertedImageUrl;
+                img.style.display = 'block';
+            }
 
             // 處理音樂
-            const audioPlayer = document.getElementById('audioPlayer');
-            audioPlayer.onerror = function() {
-                document.getElementById('status').className = 'status error';
-                document.getElementById('status').textContent = '無法播放音樂，請確認連結格式';
-            };
-            audioPlayer.src = convertedUrl;
-            audioPlayer.loop = true;
-            
-            // 自動播放
-            audioPlayer.play().catch(error => {
-                document.getElementById('status').className = 'status error';
-                document.getElementById('status').textContent = '無法自動播放，請點擊播放按鈕';
-            });
+            if (audioLink) {
+                const convertedAudioUrl = convertDropboxUrl(audioLink);
+                const audioPlayer = document.getElementById('audioPlayer');
+                audioPlayer.onerror = function() {
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('status').textContent = '無法播放音樂，請確認連結格式';
+                };
+                audioPlayer.src = convertedAudioUrl;
+                audioPlayer.loop = true;
+                
+                // 自動播放
+                audioPlayer.play().catch(error => {
+                    document.getElementById('status').className = 'status error';
+                    document.getElementById('status').textContent = '無法自動播放，請點擊播放按鈕';
+                });
+            }
 
-            document.getElementById('status').className = 'status ready';
-            document.getElementById('status').textContent = '正在播放...';
             document.getElementById('content').classList.remove('hidden');
         }
     </script>

@@ -150,6 +150,102 @@
     </div>
 
     <script>
+        // 註冊 Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful');
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+
+        // 添加螢幕鎖定功能
+        let wakeLock = null;
+        async function requestWakeLock() {
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                console.log('Wake Lock is active');
+            } catch (err) {
+                console.error(`${err.name}, ${err.message}`);
+            }
+        }
+
+        // 在播放音樂時請求螢幕鎖定
+        function playAudio(url) {
+            const audioPlayer = document.getElementById('audioPlayer');
+            audioPlayer.src = url;
+            audioPlayer.loop = true;
+            
+            // 請求螢幕鎖定
+            requestWakeLock();
+            
+            // 播放音樂
+            audioPlayer.play().catch(error => {
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').textContent = '無法自動播放，請點擊播放按鈕';
+            });
+        }
+
+        // 修改 handleNFCMessage 函數
+        function handleNFCMessage(message) {
+            try {
+                const data = JSON.parse(message);
+                if (data.imageUrl && data.audioUrl) {
+                    // 顯示圖片
+                    const img = document.getElementById('imageDisplay');
+                    img.onerror = function() {
+                        document.getElementById('status').className = 'status error';
+                        document.getElementById('status').textContent = '無法載入圖片，正在嘗試其他格式...';
+                        // 嘗試使用不同的圖片格式
+                        const originalUrl = data.imageUrl;
+                        const formats = [
+                            originalUrl,
+                            originalUrl.replace('?dl=1', '?raw=1'),
+                            originalUrl.replace('?dl=1', '?dl=0'),
+                            originalUrl.replace('dl.dropboxusercontent.com', 'www.dropbox.com')
+                        ];
+                        
+                        let currentFormat = 0;
+                        const tryNextFormat = () => {
+                            if (currentFormat < formats.length) {
+                                img.src = formats[currentFormat];
+                                currentFormat++;
+                            } else {
+                                document.getElementById('status').className = 'status error';
+                                document.getElementById('status').textContent = '無法載入圖片，請確認連結格式';
+                            }
+                        };
+                        
+                        img.onerror = tryNextFormat;
+                        tryNextFormat();
+                    };
+                    
+                    // 設置圖片載入成功處理
+                    img.onload = function() {
+                        document.getElementById('status').className = 'status ready';
+                        document.getElementById('status').textContent = '圖片載入成功';
+                    };
+                    
+                    img.src = data.imageUrl;
+                    img.style.display = 'block';
+
+                    // 播放音樂
+                    playAudio(data.audioUrl);
+
+                    document.getElementById('content').classList.remove('hidden');
+                } else {
+                    throw new Error('無效的 NFC 數據格式');
+                }
+            } catch (error) {
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').textContent = 'NFC 數據格式錯誤';
+            }
+        }
+
         // 檢查瀏覽器是否支援 Web NFC
         if (!('NDEFReader' in window)) {
             document.getElementById('status').className = 'status info';
@@ -181,7 +277,7 @@
                 for (const record of event.message.records) {
                     if (record.recordType === "text") {
                         const text = decoder.decode(record.data);
-                        handleNFCTag(text);
+                        handleNFCMessage(text);
                     }
                 }
             };
@@ -194,52 +290,10 @@
         function handleManualInput() {
             const input = document.getElementById('nfcData').value;
             if (input) {
-                handleNFCTag(input);
+                handleNFCMessage(input);
             } else {
                 document.getElementById('status').className = 'status error';
                 document.getElementById('status').textContent = '請輸入有效的 NFC 卡片數據';
-            }
-        }
-
-        // 處理 NFC 標籤內容
-        function handleNFCTag(content) {
-            try {
-                const data = JSON.parse(content);
-                
-                // 處理圖片
-                if (data.imageUrl) {
-                    const img = document.getElementById('imageDisplay');
-                    img.onerror = function() {
-                        document.getElementById('status').className = 'status error';
-                        document.getElementById('status').textContent = '無法載入圖片，請確認連結格式';
-                    };
-                    img.src = data.imageUrl;
-                    img.style.display = 'block';
-                }
-
-                // 處理音樂
-                if (data.audioUrl) {
-                    const audioPlayer = document.getElementById('audioPlayer');
-                    audioPlayer.onerror = function() {
-                        document.getElementById('status').className = 'status error';
-                        document.getElementById('status').textContent = '無法播放音樂，請確認連結格式';
-                    };
-                    audioPlayer.src = data.audioUrl;
-                    audioPlayer.loop = true;
-                    
-                    // 自動播放
-                    audioPlayer.play().catch(error => {
-                        document.getElementById('status').className = 'status error';
-                        document.getElementById('status').textContent = '無法自動播放，請點擊播放按鈕';
-                    });
-                }
-
-                document.getElementById('status').className = 'status ready';
-                document.getElementById('status').textContent = '正在播放...';
-                document.getElementById('content').classList.remove('hidden');
-            } catch (error) {
-                document.getElementById('status').className = 'status error';
-                document.getElementById('status').textContent = '無效的 NFC 卡片數據';
             }
         }
     </script>

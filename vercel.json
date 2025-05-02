@@ -16,5 +16,11 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/test",
+      "destination": "/test.html"
+    }
   ]
 } 
